@@ -1,8 +1,10 @@
-# Speech-To-Physical-Text-Plotter
- My machine is a pen plotter that physically writes down whatever you say to it. It's like speech-to-text, but now it's actually writing.
+# VoiceScipt
+ ### A Speech-to-physical-text plotter
+My machine is a pen plotter that physically writes down whatever you say to it. It's like speech-to-text, but now it's actually writing.
  
 <img width="530" height="298" alt="gif - July 11, 2026 at 01 47 08" src="https://github.com/user-attachments/assets/e553d5aa-d761-409c-b1c4-8b83ecc2ac9e" />
 
+I created VoiceScript with the goal of helping those with writing disabilites take and keep physical notes. 
 
  # Try it yourself
  If you have a machine that can process G-code, connect it to your computer. While I use a custom-made 3D-printed pen holder, it is not necessary. You can just zip-tie a pen onto the head like I originally did. Then, run the file [`talk_to_plot.py`](./talk_to_plot.py) on your terminal or IDE. From there, simply follow the instructions and click Enter to start. 
@@ -98,3 +100,10 @@ Print them yourself here:
    - 3D printed used a red PLA filament.
    - Two 3M screws, two washers, and two nuts, used for mounting the holder onto the plotter
    - An ultrafine Sharpie
+   - 
+  # Future plans
+  I have many ideas to build upon and things to add to this project. I will list them below:
+  1. Move my code over to a Raspberry Pi to make the project more accesible. This will also allow me to keep the plotter as one device and remove the need for a computer.
+  2. Add z-coordinates to my code to make it compatible with any machine that takes g-code
+  3. Install and add a working z-axis to my plotter. My current idea is to use a servo motor to move the pen up and down.
+  4. Add the ability to draw. By telling the plotter "draw", it will create an image, turn it into G-code, and draw it. A z-axis is needed for this and I assume AI will be needed too to create the image.
