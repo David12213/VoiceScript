@@ -40,7 +40,7 @@ def initialize_machine():
         dev = serial.Serial(port_path, BAUD_RATE, timeout=1, write_timeout=1)
         time.sleep(2)  
         
-        for cmd in ["\n\n", "$X", "$H"]:
+        for cmd in ["\n\n", "$X", "$H", "G28"]:
             dev.write(f"{cmd}\n".encode())
             time.sleep(0.5)
         
@@ -71,6 +71,7 @@ def send_gcode_line(dev, command):
         time.sleep(0.005)
 
 def speech_text_to_grbl_gcode(text):
+
     gcode_commands = ["G21", "G90"]
     
     font = HersheyFonts.HersheyFonts()
