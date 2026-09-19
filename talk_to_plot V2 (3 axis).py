@@ -7,25 +7,25 @@ import HersheyFonts
 import serial
 import speech_recognition as sr
 
-# Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC.
+# Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC. GRBl one is like V1 anyways
 FIRMWARE = "MARLIN"
 
 #Marlin printers use either 115200 or 250000 baud
 BAUD_RATE = 115200
 
-DRAW_FEED_RATE = 2800
+DRAW_FEED_RATE = 2800 #fastest with smudging (I think)
 TRAVEL_FEED_RATE = 6500
 Z_FEED_RATE = 600
 FONT_SIZE = 18.0
 
-# Writing area
+# Writing area, adjust
 START_X = 15.0
 START_Y = 60.0
 MAX_X = 200.0
 MIN_Y = 0.0
 LINE_SPACING = 20.0
 
-#smaller Z lowers it.
+#smaller Z lowers it
 PEN_DOWN_Z = 0.7
 PEN_UP_Z = 3.5
 
@@ -49,6 +49,7 @@ def auto_discover_machine_port():
         if ports:
             print(f"Discovered and binding to active physical port: {ports[0]}")
             return ports[0]
+        #This either works or doesnt work, idk how to fix so hope it works
 
     return None
 
@@ -99,7 +100,7 @@ def initialize_machine():
         )
         time.sleep(2)
 
-        #discard strtup messages
+        #discard strtup messages on 3d printer
         dev.write(b"\n\n")
         time.sleep(0.5)
         dev.reset_input_buffer()
@@ -118,7 +119,7 @@ def initialize_machine():
                 return None
 
         for cmd in [
-            "G21",  # millimeters
+            "G21",  
             "G90",  
             f"G0 Z{PEN_UP_Z:.2f} F{Z_FEED_RATE}",
         ]:
