@@ -13,7 +13,7 @@ FIRMWARE = "MARLIN"
 #Marlin printers use either 115200 or 250000 baud
 BAUD_RATE = 115200
 
-DRAW_FEED_RATE = 2800 #fastest with smudging (I think)
+DRAW_FEED_RATE = 2800 #fastest without smudging (I think)
 TRAVEL_FEED_RATE = 6500
 Z_FEED_RATE = 600
 FONT_SIZE = 18.0
