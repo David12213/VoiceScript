@@ -13,10 +13,10 @@ FIRMWARE = "MARLIN"
 #Marlin printers use either 115200 or 250000 baud
 BAUD_RATE = 115200
 
-DRAW_FEED_RATE = 2800 #fastest without smudging (I think)
+DRAW_FEED_RATE = 4200 #fastest without smudging (I think)
 TRAVEL_FEED_RATE = 6500
 Z_FEED_RATE = 600
-FONT_SIZE = 18.0
+FONT_SIZE = 12.0
 
 # Writing area, adjust
 START_X = 15.0
@@ -27,7 +27,7 @@ LINE_SPACING = 20.0
 
 #smaller Z lowers it
 PEN_DOWN_Z = 0.7
-PEN_UP_Z = 3.5
+PEN_UP_Z = 2.5
 
 WORD_SPACING = FONT_SIZE * 0.3
 WORD_END_PADDING = FONT_SIZE * 0.2
@@ -87,7 +87,7 @@ def initialize_machine():
     port_path = auto_discover_machine_port()
 
     if not port_path:
-        print("\nNo USB-connected hardware detected.")
+        print("\nNo hardware detected.")
         return None
 
     try:
