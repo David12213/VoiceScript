@@ -1,0 +1,17 @@
+{
+    "FIRMWARE": "MARLIN",
+    "BAUD_RATE": 115200,
+    "DRAW_FEED_RATE": 2800.0,
+    "TRAVEL_FEED_RATE": 6500.0,
+    "Z_FEED_RATE": 600.0,
+    "FONT_SIZE": 13.0,
+    "START_X": 15.0,
+    "START_Y": 60.0,
+    "MAX_X": 200.0,
+    "MIN_Y": 0.0,
+    "LINE_SPACING": 20.0,
+    "PEN_DOWN_Z": 0.7,
+    "PEN_UP_Z": 2.0,
+    "WORD_SPACING": 3.9,
+    "WORD_END_PADDING": 2.6
+}
