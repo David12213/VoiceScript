@@ -13,13 +13,13 @@ import threading
 import json
 import os
 
-# Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC.
+# Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC. GRBl one is like V1 anyways
 FIRMWARE = "MARLIN"
 
-# Marlin printers use either 115200 or 250000 baud
+#Marlin printers use either 115200 or 250000 baud
 BAUD_RATE = 115200
 
-DRAW_FEED_RATE = 2800
+DRAW_FEED_RATE = 2800 #fastest without smudging (I think)
 TRAVEL_FEED_RATE = 6500
 Z_FEED_RATE = 600
 FONT_SIZE = 13.0
@@ -31,7 +31,7 @@ MAX_X = 200.0
 MIN_Y = 0.0
 LINE_SPACING = 20.0
 
-# Smaller Z lowers it
+#smaller Z lowers it
 PEN_DOWN_Z = 0.7
 PEN_UP_Z = 3.5
 
@@ -53,6 +53,7 @@ def auto_discover_machine_port():
         ports = glob.glob(pattern)
         if ports:
             return ports[0]
+        #This either works or doesnt work, idk how to fix so hope it works
 
     return None
 
@@ -99,7 +100,7 @@ def initialize_machine():
         )
         time.sleep(2)
 
-        # Discard startup messages on 3D printer
+        #discard strtup messages on 3d printer
         dev.write(b"\n\n")
         time.sleep(0.5)
         dev.reset_input_buffer()
@@ -127,7 +128,8 @@ def initialize_machine():
 
         return dev
 
-    except Exception:
+    except Exception as e:
+        pass
         return None
 
 
@@ -175,7 +177,7 @@ def speech_text_to_grbl_gcode(text):
         word_min_x = min(x for x, _ in all_points)
         word_width = get_word_width(strokes)
 
-        # Go to next line if word is too long
+        #go to next lije of word is too long
         if current_x + word_width > MAX_X and current_x != START_X:
             add_pen_up(gcode_commands)
             current_y -= LINE_SPACING
@@ -191,7 +193,7 @@ def speech_text_to_grbl_gcode(text):
                 f"G0 X{current_x:.2f} Y{current_y:.2f} F{TRAVEL_FEED_RATE}"
             )
 
-        # Stop machine from constantly lifting
+        #stop machine from constantly lifting
         for stroke in strokes:
             first_x, first_y = stroke[0]
             start_x = current_x + (first_x - word_min_x)
@@ -215,7 +217,6 @@ def speech_text_to_grbl_gcode(text):
         current_x += word_width + WORD_SPACING
 
     add_pen_up(gcode_commands)
-
     if FIRMWARE.upper() == "MARLIN":
         gcode_commands.append("M400")
     else:
@@ -242,7 +243,7 @@ def write_text(dev, text, status_callback=None):
         if status_callback:
             status_callback("Writing...")
 
-
+        # Check cancellation before sending setup commands.
         setup_commands = [
             "G21",
             "G90",
@@ -265,9 +266,7 @@ def write_text(dev, text, status_callback=None):
             return False
 
         commands = speech_text_to_grbl_gcode(text)
-
         for cmd in commands:
-            # Stop sending drawing commands after cancellation.
             if cancel_requested.is_set():
                 return False
 
@@ -284,12 +283,10 @@ def write_text(dev, text, status_callback=None):
 
         time.sleep(1.0)
 
-        # Do not home the machine after STOP has been requested.
         if cancel_requested.is_set():
             return False
 
         home_command = "G28" if FIRMWARE.upper() == "MARLIN" else "$H"
-
         if not send_gcode_line(dev, home_command):
             if status_callback:
                 status_callback("Writing finished, but homing failed.")
@@ -301,15 +298,12 @@ def write_text(dev, text, status_callback=None):
         if status_callback and not cancel_requested.is_set():
             status_callback(f"Layout error: {e}")
         return False
-
     except Exception as e:
         if status_callback and not cancel_requested.is_set():
             status_callback(f"Writing error: {e}")
         return False
 
-
-# UI
-
+#UI
 machine_device = None
 is_busy = False
 pending_text = None
@@ -397,6 +391,7 @@ def apply_settings():
 def save_settings():
     try:
         apply_settings()
+
         settings = get_settings()
 
         with open(SETTINGS_FILE, "w") as file:
@@ -507,13 +502,11 @@ def speak():
     if pending_text is not None:
         text_to_write = pending_text
         pending_text = None
-
-        # Reset the cancellation flag for this new writing job.
         cancel_requested.clear()
-
         is_busy = True
         speak_button.config(state="disabled", text="Writing...")
         stop_button.config(state="normal")
+        retalk_button.config(state="disabled")
         status_var.set("Writing...")
         status_label.config(foreground="#d97706")
 
@@ -528,7 +521,6 @@ def speak():
 
         def run_write():
             global is_busy
-
             write_text(machine_device, text_to_write, update_activity)
             is_busy = False
             root.after(0, finish_writing)
@@ -537,7 +529,6 @@ def speak():
         return
 
     apply_settings()
-
     is_busy = True
     speak_button.config(state="disabled", text="Listening...")
     stop_button.config(state="disabled")
@@ -547,68 +538,54 @@ def speak():
 
     def run_listen():
         global is_busy
-
         try:
             text = listen_for_text()
             root.after(0, lambda recognized=text: show_recognized_text(recognized))
-
         except sr.WaitTimeoutError:
-            root.after(
-                0,
-                lambda: show_listen_error(
-                    "No speech detected. Please try again."
-                )
-            )
-
+            root.after(0, lambda: show_listen_error("No speech detected. Please try again."))
         except sr.UnknownValueError:
-            root.after(
-                0,
-                lambda: show_listen_error(
-                    "Couldn't understand the speech. Please try again."
-                )
-            )
-
+            root.after(0, lambda: show_listen_error("Couldn't understand the speech. Please try again."))
         except sr.RequestError as e:
-            root.after(
-                0,
-                lambda error=str(e): show_listen_error(
-                    f"Speech recognition error: {error}"
-                )
-            )
-
+            root.after(0, lambda error=str(e): show_listen_error(f"Speech recognition error: {error}"))
         except Exception as e:
-            root.after(
-                0,
-                lambda error=str(e): show_listen_error(
-                    f"Listening error: {error}"
-                )
-            )
-
+            root.after(0, lambda error=str(e): show_listen_error(f"Listening error: {error}"))
         finally:
             is_busy = False
 
     threading.Thread(target=run_listen, daemon=True).start()
 
 
+def retalk():
+    global pending_text
+
+    if is_busy:
+        return
+
+    # Discard the previous recognized words
+    pending_text = None
+    recognized_text_var.set("")
+
+    # Start a new recording
+    retalk_button.config(state="disabled")
+    speak_button.config(state="normal", text="Speak & Review")
+
+    speak()
+
+
 def stop_machine():
-    """Request that the machine stop and cancel the current writing job."""
     global pending_text
 
     cancel_requested.set()
     pending_text = None
 
-    # Send the firmware-specific stop request.
     if machine_device and machine_device.is_open:
         try:
             if FIRMWARE.upper() == "MARLIN":
                 machine_device.write(b"M410\n")
                 machine_device.flush()
-
             elif FIRMWARE.upper() == "GRBL":
-                # GRBL real-time feed hold; this is not a full reset.
                 machine_device.write(b"!")
                 machine_device.flush()
-
         except Exception:
             pass
 
@@ -620,39 +597,36 @@ def stop_machine():
 
 def show_recognized_text(text):
     global pending_text
-
     pending_text = text
     recognized_text_var.set(text)
-
     speak_button.config(state="normal", text="Confirm & Write")
+    retalk_button.config(state="normal")
     stop_button.config(state="disabled")
-
     status_var.set("Check the words above, then click Confirm & Write.")
     status_label.config(foreground="#198754")
 
 
 def show_listen_error(message):
     global pending_text
-
     pending_text = None
     recognized_text_var.set("")
-
     speak_button.config(state="normal", text="Speak & Review")
+    retalk_button.config(state="disabled")
     stop_button.config(state="disabled")
-
     status_var.set(message)
     status_label.config(foreground="#dc3545")
 
 
 def finish_writing():
     speak_button.config(state="normal", text="Speak & Review")
+    retalk_button.config(state="disabled")
     stop_button.config(state="disabled")
 
     if cancel_requested.is_set():
-        status_var.set("Writing cancelled.")
+        status_var.set("Writing cancelled — check the machine before restarting.")
         status_label.config(foreground="#dc3545")
     else:
-        status_var.set("Click Speak & Review to begin again.")
+        status_var.set("Ready — click Speak & Review to begin again.")
         status_label.config(foreground="#198754")
 
 
@@ -726,13 +700,13 @@ def close_program():
                 f"G0 Z{PEN_UP_Z:.2f} F{Z_FEED_RATE}"
             )
             machine_device.close()
-        except Exception:
+        except:
             pass
 
     root.destroy()
 
 
-# UI setup
+#UI setup
 root = tk.Tk()
 root.configure(bg="#2E2E2E")
 
@@ -761,11 +735,6 @@ style.configure(
     fieldbackground="#2E2E2E",
     foreground="#F0F0F0"
 )
-
-try:
-    style.theme_use("clam")
-except Exception:
-    pass
 
 style.configure(
     "Title.TLabel",
@@ -890,6 +859,32 @@ writing_frame.pack(
     pady=5
 )
 
+# reuse label
+def add_setting(parent, label, variable, row, column, entry_width=12):
+    ttk.Label(
+        parent,
+        text=label + ":"
+    ).grid(
+        row=row,
+        column=column,
+        sticky="w",
+        padx=5,
+        pady=5
+    )
+
+    ttk.Entry(
+        parent,
+        textvariable=variable,
+        width=entry_width
+    ).grid(
+        row=row,
+        column=column + 1,
+        sticky="w",
+        padx=5,
+        pady=5
+    )
+
+
 writing_settings = [
     ("Font size", font_size_var),
     ("Start X", start_x_var),
@@ -902,29 +897,7 @@ writing_settings = [
 for i, (label, variable) in enumerate(writing_settings):
     row = i // 2
     column = (i % 2) * 2
-
-    ttk.Label(
-        writing_frame,
-        text=label + ":"
-    ).grid(
-        row=row,
-        column=column,
-        sticky="w",
-        padx=5,
-        pady=5
-    )
-
-    ttk.Entry(
-        writing_frame,
-        textvariable=variable,
-        width=12
-    ).grid(
-        row=row,
-        column=column + 1,
-        sticky="w",
-        padx=5,
-        pady=5
-    )
+    add_setting(writing_frame, label, variable, row, column)
 
 speed_frame = ttk.LabelFrame(
     root,
@@ -944,28 +917,7 @@ speed_settings = [
 ]
 
 for i, (label, variable) in enumerate(speed_settings):
-    ttk.Label(
-        speed_frame,
-        text=label + ":"
-    ).grid(
-        row=0,
-        column=i * 2,
-        sticky="w",
-        padx=5,
-        pady=5
-    )
-
-    ttk.Entry(
-        speed_frame,
-        textvariable=variable,
-        width=10
-    ).grid(
-        row=0,
-        column=i * 2 + 1,
-        sticky="w",
-        padx=5,
-        pady=5
-    )
+    add_setting(speed_frame, label, variable, 0, i * 2, entry_width=10)
 
 pen_frame = ttk.LabelFrame(
     root,
@@ -978,27 +930,8 @@ pen_frame.pack(
     pady=5
 )
 
-ttk.Label(
-    pen_frame,
-    text="Pen down Z:"
-).grid(row=0, column=0, sticky="w", padx=5, pady=5)
-
-ttk.Entry(
-    pen_frame,
-    textvariable=pen_down_var,
-    width=12
-).grid(row=0, column=1, sticky="w", padx=5, pady=5)
-
-ttk.Label(
-    pen_frame,
-    text="Pen up Z:"
-).grid(row=0, column=2, sticky="w", padx=(25, 5), pady=5)
-
-ttk.Entry(
-    pen_frame,
-    textvariable=pen_up_var,
-    width=12
-).grid(row=0, column=3, sticky="w", padx=5, pady=5)
+add_setting(pen_frame, "Pen down Z", pen_down_var, 0, 0)
+add_setting(pen_frame, "Pen up Z", pen_up_var, 0, 2)
 
 control_frame = ttk.Frame(root)
 control_frame.pack(
@@ -1046,7 +979,21 @@ speak_button.pack(
     pady=(2, 10)
 )
 
-# STOP BUTTON — create it before the main loop.
+
+retalk_button = ttk.Button(
+    root,
+    text="Retalk / Try Again",
+    command=retalk,
+    state="disabled",
+    style="Big.TButton"
+)
+retalk_button.pack(
+    fill="x",
+    padx=25,
+    pady=(0, 10)
+)
+
+
 stop_button = ttk.Button(
     root,
     text="STOP / CANCEL",
@@ -1071,9 +1018,7 @@ recognized_frame.pack(
     pady=(4, 8)
 )
 
-recognized_text_var = tk.StringVar(
-    value="Your recognized words will appear here."
-)
+recognized_text_var = tk.StringVar(value="Your recognized words will appear here.")
 
 recognized_text_label = ttk.Label(
     recognized_frame,
