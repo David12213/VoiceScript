@@ -1,7 +1,7 @@
 # UI and Image outline generator for Voicescript 
 > For project reviewers of Terra: This readme is specifically for Terra. Everything I mention here was added for Terra. This project originally began in Stardance (everything I did for Stardance is apart of the original README.md). The UI + the code for image generation (SO basically the talk_to_plot.ui,py file) has NOT been submitted to Stardance, Instead I am submitting this for Terra. I promise im not double dipping. 
 
-## A working UI that makes my VoiceScript Project much more accesible, as well as a image to g code function that creates a outline of a inputted photo. 
+## A working UI that makes my VoiceScript Project much more accessible, as well as an image to g code function that creates an outline of an inputted photo. Coded purely in Python, and UI was made with Tkinter.
 
 <img width="1439" height="869" alt="Screenshot 2026-10-11 at 5 41 09 PM" src="https://github.com/user-attachments/assets/8dee17b6-be69-4ffa-b7c0-856b70ad849f" />
 <img width="1443" height="368" alt="Screenshot 2026-10-11 at 5 41 24 PM" src="https://github.com/user-attachments/assets/27018ff2-790c-438e-919d-290b5773d349" />
@@ -14,4 +14,7 @@ I created this UI to make it more usable to anyone who uses my code, as going ba
 - The ability to save and load your own settings
 - A button to record, and a button to re-record
 - An emergency cancel button (which I should've added sooner)
-Additionally, I added a function where you can input an image and receive an outline of it in Gcode, allowing you to also print it. Essentially, you can upload a photo of something, the program will show you the outline it created, and you can then send it to your connected machine. The photo below shows an example with a photo of my cat.
+Additionally, I added a function where you can input an image and receive an outline of it in Gcode, allowing you to also print it. Essentially, you can upload a photo of something, the program will show you the outline it created, and you can then send it to your connected machine. The photo below shows an example with a photo of a f-35 blueprint I found online.
+<img width="1470" height="700" alt="Screenshot 2026-10-12 at 12 25 09 AM" src="https://github.com/user-attachments/assets/69c442c3-6bdd-4937-a22c-c833c6e4e170" />
+
+> Note: This is a very soft launch. The scroll doesn't fully work on the UI and will not scale landscape photos accurately certain times.
