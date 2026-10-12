@@ -284,7 +284,7 @@ def write_text(dev, text, status_callback= None):
         if cancel_requested.is_set():
             return False
 
-        home_command =get_home_command
+        home_command =get_home_command()
         if not send_gcode_line(dev, home_command):
             if status_callback:
                 status_callback("Writing finished, but homing failed.")
