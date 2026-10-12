@@ -8,10 +8,12 @@ import HersheyFonts
 import serial
 import speech_recognition as sr
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import threading
 import json
 import os
+import cv2
+from PIL import Image, ImageTk
 
 # Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC. GRBl one is like V1 anyways
 FIRMWARE = "MARLIN"
@@ -129,7 +131,6 @@ def initialize_machine():
         return dev
 
     except Exception as e:
-        pass
         return None
 
 
@@ -140,14 +141,14 @@ def add_pen_up(commands):
 def add_pen_down(commands):
     commands.append(f"G1 Z{PEN_DOWN_Z:.2f} F{Z_FEED_RATE}")
 
+def get_home_command():
+    return "G28" if FIRMWARE.upper() == "MARLIN" else "$H"
 
 def get_word_strokes(font, word):
-    """Return the word as separate continuous pen strokes."""
     return [list(stroke) for stroke in font.strokes_for_text(word) if len(stroke) >= 2]
 
 
 def get_word_width(strokes):
-    """Measure a rendered word using all points in all of its strokes."""
     points = [point for stroke in strokes for point in stroke]
     if not points:
         return 0.0
@@ -226,7 +227,6 @@ def speech_text_to_grbl_gcode(text):
 
 
 def listen_for_text():
-    """Listen once and return the recognized words without moving the machine."""
     recognizer = sr.Recognizer()
     recognizer.pause_threshold = 2.0
 
@@ -237,13 +237,11 @@ def listen_for_text():
     return recognizer.recognize_google(audio).capitalize()
 
 
-def write_text(dev, text, status_callback=None):
-    """Write previously confirmed text to the machine."""
+def write_text(dev, text, status_callback= None):
     try:
         if status_callback:
             status_callback("Writing...")
 
-        # Check cancellation before sending setup commands.
         setup_commands = [
             "G21",
             "G90",
@@ -286,7 +284,7 @@ def write_text(dev, text, status_callback=None):
         if cancel_requested.is_set():
             return False
 
-        home_command = "G28" if FIRMWARE.upper() == "MARLIN" else "$H"
+        home_command =get_home_command
         if not send_gcode_line(dev, home_command):
             if status_callback:
                 status_callback("Writing finished, but homing failed.")
@@ -302,6 +300,333 @@ def write_text(dev, text, status_callback=None):
         if status_callback and not cancel_requested.is_set():
             status_callback(f"Writing error: {e}")
         return False
+
+#image stuff
+
+selected_image_path = None
+image_gcode_commands = []
+image_preview_photo = None
+
+
+def get_image_edges(image_path, error_message="Could not open this image."):
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+    if image is None:
+        raise ValueError(error_message)
+
+    image_height_px, image_width_px = image.shape
+    max_dimension = 1200
+
+    scale = min(
+        1.0,
+        max_dimension / max(image_height_px, image_width_px)
+    )
+
+    if scale < 1.0:
+        image = cv2.resize(
+            image,
+            (
+                int(image_width_px * scale),
+                int(image_height_px * scale)
+            ),
+            interpolation=cv2.INTER_AREA
+        )
+
+    blurred = cv2.GaussianBlur(image, (5, 5), 0)
+    edges = cv2.Canny(blurred, 60, 150)
+
+    return edges
+
+
+def generate_image_gcode(image_path, drawing_width, drawing_height):
+
+    if drawing_width <= 0 or drawing_height <= 0:
+        raise ValueError("Drawing width and height must be positive")
+
+    if START_X + drawing_width > MAX_X:
+        raise ValueError("Image is too wide for the configured X area.")
+
+    if START_Y - drawing_height < MIN_Y:
+        raise ValueError("Image is too tall for the configured Y area.")
+
+    edges = get_image_edges(image_path)
+    image_height_px, image_width_px = edges.shape
+
+    contours, _ = cv2.findContours(
+        edges,
+        cv2.RETR_LIST,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    commands = ["G21", "G90"]
+
+    def to_machine_xy(px, py):
+        x = START_X + (px / image_width_px) * drawing_width
+        y = START_Y - (py / image_height_px) * drawing_height
+        return x, y
+
+    add_pen_up(commands)
+
+    for contour in contours:
+        perimeter = cv2.arcLength(contour, True)
+
+        # Ignore tiny dots and stuff
+        if perimeter < 8:
+            continue
+
+        approx = cv2.approxPolyDP(
+            contour,
+            epsilon=1.0,
+            closed=True
+        )
+
+        points = approx.reshape(-1, 2)
+
+        if len(points) < 2:
+            continue
+
+        first_x, first_y = to_machine_xy(
+            points[0][0],
+            points[0][1]
+        )
+
+        add_pen_up(commands)
+        commands.append(
+            f"G0 X{first_x:.2f} Y{first_y:.2f} "
+            f"F{TRAVEL_FEED_RATE}"
+        )
+
+        add_pen_down(commands)
+
+        for px, py in points[1:]:
+            x, y = to_machine_xy(px, py)
+
+            commands.append(
+                f"G1 X{x:.2f} Y{y:.2f} "
+                f"F{DRAW_FEED_RATE}"
+            )
+
+        commands.append(
+            f"G1 X{first_x:.2f} Y{first_y:.2f} "
+            f"F{DRAW_FEED_RATE}"
+        )
+
+        add_pen_up(commands)
+
+    add_pen_up(commands)
+
+    if FIRMWARE.upper() == "MARLIN":
+        commands.append("M400")
+    else:
+        commands.append("G4 P2.0")
+
+    if len(commands) <= 5:
+        raise ValueError(
+            "No usable outlines found. Try another photo."
+        )
+
+    return commands
+
+#image preview
+def show_outline_preview(image_path):
+
+    global image_preview_photo
+
+    edges = get_image_edges(
+        image_path,
+        "Could not open the image for preview."
+    )
+
+    #for backgrpound
+    preview = Image.fromarray(255 - edges)
+    preview.thumbnail((420, 280))
+
+    image_preview_photo = ImageTk.PhotoImage(preview)
+    image_preview_label.config(
+        image=image_preview_photo,
+    )
+
+
+def choose_image():
+
+    global selected_image_path
+
+    path = filedialog.askopenfilename(
+        title="Choose an image",
+        filetypes=[
+            ("Image files", "*.png *.jpg *.jpeg"),
+            ("All files", "*.*")
+        ]
+    )
+
+    if not path:
+        return False
+
+    try:
+        with Image.open(path) as image:
+            image.verify()
+
+        selected_image_path = path
+        show_outline_preview(path)
+        image_gcode_commands.clear()
+
+        image_status_var.set(
+            f"Selected: {os.path.basename(path)}. Generating G-code..."
+        )
+        prepare_image_gcode()
+
+    except Exception as e:
+        selected_image_path = None
+        image_gcode_commands.clear()
+
+        messagebox.showerror("Image Error", str(e))
+
+#just gcode gen
+def prepare_image_gcode():
+
+    global image_gcode_commands
+
+    if not selected_image_path:
+        messagebox.showwarning(
+            "No image",
+            "Choose a PNG or JPEG image first."
+        )
+        return
+
+    try:
+        width = float(image_width_var.get())
+        height = float(image_height_var.get())
+
+        apply_settings()
+
+        image_gcode_commands = generate_image_gcode(
+            selected_image_path,
+            width,
+            height
+        )
+
+        image_status_var.set(
+            "G-code ready — review the preview before printing."
+        )
+
+    except Exception as e:
+        image_gcode_commands = []
+
+        messagebox.showerror(
+            "G-code Error",
+            str(e)
+        )
+
+
+def print_image():
+    global is_busy
+    if not machine_device:
+        messagebox.showwarning(
+            "Not connected",
+            "Connect VoiceScript to the machine first"
+        )
+        return
+
+    if is_busy:
+        messagebox.showwarning(
+            "Machine busy",
+            "Wait for the current operation to finish"
+        )
+        return
+
+    if not image_gcode_commands:
+        messagebox.showwarning(
+            "No G code",
+            "Choose an image and wait for G-code generation to finish first."
+        )
+        return
+
+    confirmed = messagebox.askyesno(
+        "Confirm image printing",
+        "The machine will move and draw the image"
+    )
+
+    if not confirmed:
+        return
+
+    is_busy = True
+    cancel_requested.clear()
+
+    stop_button.config(state="normal")
+    speak_button.config(state="disabled")
+    image_status_var.set("Printing image...")
+
+    commands_to_print = list(image_gcode_commands)
+
+    def worker():
+        global is_busy
+
+        success = True
+        cancelled = False
+
+        try:
+            setup_commands = [
+                "G21",
+                "G90",
+                f"G0 Z{PEN_UP_Z:.2f} F{Z_FEED_RATE}"
+            ]
+
+            for command in setup_commands + commands_to_print:
+                if cancel_requested.is_set():
+                    success = False
+                    cancelled = True
+                    break
+
+                if not send_gcode_line(machine_device, command):
+                    success = False
+                    break
+
+            if success and not cancel_requested.is_set():
+                home_command = get_home_command()
+
+                if not send_gcode_line(
+                    machine_device,
+                    home_command
+                ):
+                    success = False
+
+            if cancel_requested.is_set():
+                cancelled = True
+                success = False
+
+        except Exception:
+            success = False
+
+        finally:
+            is_busy = False
+
+            def finish():
+                speak_button.config(
+                    state="normal",
+                    text="Speak & Review"
+                )
+                stop_button.config(state="disabled")
+
+                if cancelled:
+                    image_status_var.set(
+                        "Image printing cancelled"
+                    )
+                elif success:
+                    image_status_var.set(
+                        "Image printing finished"
+                    )
+                else:
+                    image_status_var.set(
+                        "Printing failed"
+                    )
+
+            root.after(0, finish)
+
+    threading.Thread(
+        target=worker,
+        daemon=True
+    ).start()
+
 
 #UI
 machine_device = None
@@ -635,10 +960,7 @@ def home_machine():
         return
 
     def home():
-        if FIRMWARE.upper() == "MARLIN":
-            send_gcode_line(machine_device, "G28")
-        else:
-            send_gcode_line(machine_device, "$H")
+        send_gcode_line(machine_device, get_home_command())
 
         root.after(
             0,
@@ -738,23 +1060,105 @@ style.configure(
 
 style.configure(
     "Title.TLabel",
-    font=("Helvetica", 24, "bold")
+    font=("Arial", 24, "bold")
 )
 
 style.configure(
     "Subtitle.TLabel",
-    font=("Helvetica", 11)
+    font=("Arial", 11)
 )
 
 style.configure(
     "Section.TLabelframe.Label",
-    font=("Helvetica", 11, "bold")
+    font=("Arial", 11, "bold")
 )
 
 style.configure(
     "Big.TButton",
-    font=("Helvetica", 12, "bold"),
+    font=("Arial", 12, "bold"),
     padding=10
+)
+
+
+# Scrollable UI
+main_container = ttk.Frame(root)
+main_container.pack(fill="both", expand=True)
+
+main_canvas = tk.Canvas(
+    main_container,
+    highlightthickness=0,
+    borderwidth=0,
+    background="#2E2E2E"
+)
+
+main_scrollbar = ttk.Scrollbar(
+    main_container,
+    orient="vertical",
+    command=main_canvas.yview
+)
+
+main_canvas.configure(yscrollcommand=main_scrollbar.set)
+main_scrollbar.pack(side="right", fill="y")
+main_canvas.pack(side="left", fill="both", expand=True)
+
+scrollable_frame = ttk.Frame(main_canvas)
+scrollable_window = main_canvas.create_window(
+    (0, 0),
+    window=scrollable_frame,
+    anchor="nw"
+)
+
+
+def update_scroll_region(event=None):
+    main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+
+
+def fit_scrollable_width(event):
+    main_canvas.itemconfigure(scrollable_window, width=event.width)
+
+
+scrollable_frame.bind("<Configure>", update_scroll_region)
+main_canvas.bind("<Configure>", fit_scrollable_width)
+
+
+trackpad_scroll_remainder = 0.0
+
+def scroll_with_touchpad(event):
+    global trackpad_scroll_remainder
+
+    delta_y = getattr(event, "delta", 0)
+
+    if delta_y == 0:
+        return "break"
+
+   #this can be optimized took me forever
+    trackpad_scroll_remainder += -delta_y / 300.0
+
+    whole_units = int(trackpad_scroll_remainder)
+
+    if whole_units != 0:
+        main_canvas.yview_scroll(whole_units, "units")
+        trackpad_scroll_remainder -= whole_units
+
+    return "break"
+
+
+main_canvas.unbind_all("<TouchpadScroll>")
+main_canvas.unbind_all("<MouseWheel>")
+
+main_canvas.bind_all(
+    "<TouchpadScroll>",
+    scroll_with_touchpad
+)
+
+main_canvas.bind_all(
+    "<MouseWheel>",
+    scroll_with_touchpad
+)
+
+main_canvas.bind_all(
+    "<TouchpadScroll>",
+    scroll_with_touchpad
 )
 
 firmware_var = tk.StringVar(value=FIRMWARE)
@@ -781,21 +1185,21 @@ word_padding_var = tk.StringVar(value=str(WORD_END_PADDING))
 status_var = tk.StringVar(value="Not connected")
 
 title = ttk.Label(
-    root,
+    scrollable_frame,
     text="VoiceScript",
     style="Title.TLabel"
 )
 title.pack(pady=(18, 2))
 
 subtitle = ttk.Label(
-    root,
+    scrollable_frame,
     text="Write what you speak!",
     style="Subtitle.TLabel"
 )
 subtitle.pack(pady=(0, 15))
 
 connection_frame = ttk.LabelFrame(
-    root,
+    scrollable_frame,
     text="Machine (Marlin for 3D printer, GRBL for laser cutter)",
     padding=12
 )
@@ -849,7 +1253,7 @@ connect_button.grid(
 )
 
 writing_frame = ttk.LabelFrame(
-    root,
+    scrollable_frame,
     text="Writing & Spacing (Adjust to your machine)",
     padding=12
 )
@@ -900,7 +1304,7 @@ for i, (label, variable) in enumerate(writing_settings):
     add_setting(writing_frame, label, variable, row, column)
 
 speed_frame = ttk.LabelFrame(
-    root,
+    scrollable_frame,
     text="Speed",
     padding=12
 )
@@ -920,7 +1324,7 @@ for i, (label, variable) in enumerate(speed_settings):
     add_setting(speed_frame, label, variable, 0, i * 2, entry_width=10)
 
 pen_frame = ttk.LabelFrame(
-    root,
+    scrollable_frame,
     text="Pen",
     padding=12
 )
@@ -933,7 +1337,7 @@ pen_frame.pack(
 add_setting(pen_frame, "Pen down Z", pen_down_var, 0, 0)
 add_setting(pen_frame, "Pen up Z", pen_up_var, 0, 2)
 
-control_frame = ttk.Frame(root)
+control_frame = ttk.Frame(scrollable_frame)
 control_frame.pack(
     fill="x",
     padx=25,
@@ -967,7 +1371,7 @@ for i in range(3):
 
 
 speak_button = ttk.Button(
-    root,
+    scrollable_frame,
     text="Speak & Review",
     command=speak,
     state="disabled",
@@ -981,7 +1385,7 @@ speak_button.pack(
 
 
 retalk_button = ttk.Button(
-    root,
+    scrollable_frame,
     text="Retalk / Try Again",
     command=retalk,
     state="disabled",
@@ -995,7 +1399,7 @@ retalk_button.pack(
 
 
 stop_button = ttk.Button(
-    root,
+    scrollable_frame,
     text="STOP / CANCEL",
     command=stop_machine,
     state="disabled",
@@ -1008,7 +1412,7 @@ stop_button.pack(
 )
 
 recognized_frame = ttk.LabelFrame(
-    root,
+    scrollable_frame,
     text="Recognized words — review before writing",
     padding=12
 )
@@ -1029,7 +1433,133 @@ recognized_text_label = ttk.Label(
 )
 recognized_text_label.pack(fill="x")
 
-settings_frame = ttk.Frame(root)
+#image UI
+image_width_var = tk.StringVar(value="40")
+image_height_var = tk.StringVar(value="40")
+image_status_var = tk.StringVar(
+    value="Choose an image to begin."
+)
+
+image_frame = ttk.LabelFrame(
+    scrollable_frame,
+    text="Image to G code",
+    padding=12
+)
+image_frame.pack(
+    fill="x",
+    padx=25,
+    pady=5
+)
+
+ttk.Label(
+    image_frame,
+    text="Draw photo"
+).grid(
+    row=0,
+    column=0,
+    columnspan=4,
+    sticky="w",
+    pady=5
+)
+
+ttk.Label(
+    image_frame,
+    text="Width (mm):"
+).grid(
+    row=1,
+    column=0,
+    sticky="w",
+    padx=5,
+    pady=5
+)
+
+ttk.Entry(
+    image_frame,
+    textvariable=image_width_var,
+    width=10
+).grid(
+    row=1,
+    column=1,
+    sticky="w",
+    padx=5,
+    pady=5
+)
+
+ttk.Label(
+    image_frame,
+    text="Height (mm):"
+).grid(
+    row=1,
+    column=2,
+    sticky="w",
+    padx=5,
+    pady=5
+)
+
+ttk.Entry(
+    image_frame,
+    textvariable=image_height_var,
+    width=10
+).grid(
+    row=1,
+    column=3,
+    sticky="w",
+    padx=5,
+    pady=5
+)
+
+ttk.Button(
+    image_frame,
+    text="Choose image",
+    command=choose_image
+).grid(
+    row=2,
+    column=0,
+    columnspan=2,
+    sticky="ew",
+    padx=5,
+    pady=5
+)
+
+image_preview_label = ttk.Label(
+    image_frame,
+    text="Image preview appears here."
+)
+
+image_preview_label.grid(
+    row=3,
+    column=0,
+    columnspan=4,
+    pady=8
+)
+
+ttk.Button(
+    image_frame,
+    text="PRINT IMAGE",
+    command=print_image,
+    style="Big.TButton"
+).grid(
+    row=4,
+    column=0,
+    columnspan=4,
+    sticky="ew",
+    padx=5,
+    pady=5
+)
+
+ttk.Label(
+    image_frame,
+    textvariable=image_status_var,
+    wraplength=650
+).grid(
+    row=5,
+    column=0,
+    columnspan=4,
+    sticky="w",
+    pady=5
+)
+
+settings_frame = ttk.Frame(scrollable_frame)
 settings_frame.pack(
     fill="x",
     padx=25,
@@ -1058,9 +1588,9 @@ for i in range(3):
     settings_frame.columnconfigure(i, weight=1)
 
 status_label = ttk.Label(
-    root,
+    scrollable_frame,
     textvariable=status_var,
-    font=("Helvetica", 11, "bold")
+    font=("Arial", 11, "bold")
 )
 status_label.pack(
     pady=(12, 5)
