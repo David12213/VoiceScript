@@ -26,3 +26,15 @@ Additionally, I added a function where you can input an image and receive an out
 <img width="1470" height="700" alt="Screenshot 2026-10-12 at 12 25 09 AM" src="https://github.com/user-attachments/assets/69c442c3-6bdd-4937-a22c-c833c6e4e170" />
 
 > Note: This is a very soft launch. The scroll doesn't fully work on the UI and will not scale landscape photos accurately certain times.
+
+# Requirements: 
+Python 3.12.10 (I use 3.15 but I test with 3.12.10 and it works)
+The following Python Libraries:
+- HersheyFonts
+- pyserial
+- SpeechRecognition
+- PyAudio (Speech Recognition uses it)
+- tkinter (if not pre-installed)
+- opencv-python
+- Pillow
+> Note: Not all these libraries are used for the UI, some are for the rest of the project. However, all of these libraries are needed for it to work as intended since the UI is based off of my project (aka the rest of the repository).
