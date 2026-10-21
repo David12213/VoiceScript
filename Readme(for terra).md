@@ -28,7 +28,8 @@ Additionally, I added a function where you can input an image and receive an out
 > Note: This is a very soft launch. The scroll doesn't fully work on the UI and will not scale landscape photos accurately certain times.
 
 # Requirements: 
-Python 3.12.10 (I use 3.15 but I test with 3.12.10 and it works)
+Python 3.12.10 (I use 3.15 but I tested it with 3.12.10 and it works)
+
 The following Python Libraries:
 - HersheyFonts
 - pyserial
