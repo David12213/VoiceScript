@@ -1,0 +1,6 @@
+Hershey-Fonts
+pyserial
+PyAudio
+SpeechRecognition
+opencv-python
+Pillow

@@ -1143,23 +1143,14 @@ def scroll_with_touchpad(event):
     return "break"
 
 
-main_canvas.unbind_all("<TouchpadScroll>")
 main_canvas.unbind_all("<MouseWheel>")
 
-main_canvas.bind_all(
-    "<TouchpadScroll>",
-    scroll_with_touchpad
-)
 
 main_canvas.bind_all(
     "<MouseWheel>",
     scroll_with_touchpad
 )
 
-main_canvas.bind_all(
-    "<TouchpadScroll>",
-    scroll_with_touchpad
-)
 
 firmware_var = tk.StringVar(value=FIRMWARE)
 baud_var = tk.StringVar(value=str(BAUD_RATE))
