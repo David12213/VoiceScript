@@ -39,6 +39,6 @@ The following Python Libraries:
 - Pillow
 - tkinter (if not pre-installed)
 
-all requirements are also in requirements.txt
+all requirements are also in [requirements.txt](https://github.com/David12213/VoiceScript/blob/67589337340e1856d8cff0eb24a1da79244b6ba2/requirements.txt)
   
 > Note: Not all these libraries are used for the UI, some are for the rest of the project. However, all of these libraries are needed for it to work as intended since the UI is based off of my project (aka the rest of the repository).
