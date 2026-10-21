@@ -35,7 +35,10 @@ The following Python Libraries:
 - pyserial
 - SpeechRecognition
 - PyAudio (Speech Recognition uses it)
-- tkinter (if not pre-installed)
 - opencv-python
 - Pillow
+- tkinter (if not pre-installed)
+
+all requirements are also in requirements.txt
+  
 > Note: Not all these libraries are used for the UI, some are for the rest of the project. However, all of these libraries are needed for it to work as intended since the UI is based off of my project (aka the rest of the repository).
