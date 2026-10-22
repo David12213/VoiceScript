@@ -7,7 +7,7 @@
 <img width="1443" height="368" alt="Screenshot 2026-10-11 at 5 41 24 PM" src="https://github.com/user-attachments/assets/27018ff2-790c-438e-919d-290b5773d349" />
 
 # How to use it:
-1. Run the [talk_to_plot_ui.py](https://github.com/David12213/VoiceScript/blob/dc171e4cdc6c00d23495feb74db87279fd737f9d/talk_to_plot_ui.py) file
+1. Run the [talk_to_plot_ui.py](https://github.com/David12213/VoiceScript/blob/dc171e4cdc6c00d23495feb74db87279fd737f9d/talk_to_plot_ui.py) file (.app download is in the version releases section)
 2. Look at the UI, play around, and try saving & loading settings
 3. Upload a photo and see the outline created by the program
 4. (optional) If you have a 3d printer or laser cutter, connect it to your device and click the print button to watch it be drawn out (tape a pen to the head).
