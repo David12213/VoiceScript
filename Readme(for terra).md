@@ -28,13 +28,17 @@ Additionally, I added a function where you can input an image and receive an out
 > Note: This is a very soft launch. The scroll doesn't fully work on the UI and will not scale landscape photos accurately certain times.
 
 # Requirements: 
-Python 3.12.10 (I use 3.15 but I test with 3.12.10 and it works)
+Python 3.12.10 (I use 3.15 but I tested it with 3.12.10 and it works)
+
 The following Python Libraries:
 - HersheyFonts
 - pyserial
 - SpeechRecognition
 - PyAudio (Speech Recognition uses it)
-- tkinter (if not pre-installed)
 - opencv-python
 - Pillow
+- tkinter (if not pre-installed)
+
+all requirements are also in [requirements.txt](https://github.com/David12213/VoiceScript/blob/67589337340e1856d8cff0eb24a1da79244b6ba2/requirements.txt)
+  
 > Note: Not all these libraries are used for the UI, some are for the rest of the project. However, all of these libraries are needed for it to work as intended since the UI is based off of my project (aka the rest of the repository).
