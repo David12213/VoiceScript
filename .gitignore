@@ -1,1 +1,4 @@
 .DS_Store
+# PyInstaller build files
+/build/
+/dist/
