@@ -1,3 +1,4 @@
+Python 3.12.10 or older
 Hershey-Fonts
 pyserial
 PyAudio
