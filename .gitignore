@@ -2,3 +2,4 @@
 # PyInstaller build files
 /build/
 /dist/
+.vscode
