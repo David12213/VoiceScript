@@ -319,9 +319,17 @@ body {
     height:90%
 }
 .photo img.actual-preview {
-    max-width:96%;
-    max-height:96%;
-    object-fit:contain
+    display:block;
+    width:100%;
+    height:100%;
+    max-width:100%;
+    max-height:100%;
+    min-width:0;
+    min-height:0;
+    object-fit:contain;
+    object-position:center;
+    padding:10px;
+    box-sizing:border-box
 }
 .image-meta {
     display:flex;
@@ -841,7 +849,7 @@ body {
 <input class="input" data-setting="MAX_X" value="200.0">
 </div>
 <div class="field">
-<label>Machine length (Y-axis, mm)</label>
+<label>Machine length (mm)</label>
 <input class="input" data-setting="MACHINE_HEIGHT" value="60.0">
 </div>
 </div>
