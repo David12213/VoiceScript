@@ -7,7 +7,7 @@ HTML_CONTENT = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VoiceScript — UI Preview</title>
+<title>VoiceScript - UI Preview</title>
 <style>
 :root {
     --ink:#202124;
@@ -1223,7 +1223,7 @@ class Bridge:
         except Exception:
             pass
         with lock:
-            state['status'] = 'STOP requested — check the machine.'
+            state['status'] = 'STOP requested check the machine.'
         return {'ok': True, 'status': state['status']}
 
     def choose_image(self):
@@ -1245,7 +1245,7 @@ class Bridge:
             preview.save(buf, format='PNG')
             width, height = controller.fit_image_size(path)
             with lock:
-                state.update(image=os.path.basename(path), image_width=width, image_height=height, image_ready=False, image_status='Image selected — generating plot path…', status='Image selected')
+                state.update(image=os.path.basename(path), image_width=width, image_height=height, image_ready=False, image_status='Image selected generating plot path.', status='Image selected')
             return {'ok': True, 'status': 'Image selected', 'width': width, 'height': height, 'preview': base64.b64encode(buf.getvalue()).decode('ascii')}
         except Exception as e:
             with lock:
@@ -1261,8 +1261,8 @@ class Bridge:
             core['image_gcode_commands'] = commands
             width, height = controller.fit_image_size(path)
             with lock:
-                state.update(image_width=width, image_height=height, image_ready=True, image_status='G-code ready — review before printing.', status='G-code ready — review before printing.')
-            return {'ok': True, 'status': 'G-code ready — review before printing.'}
+                state.update(image_width=width, image_height=height, image_ready=True, image_status='G-code ready review before printing.', status='G-code ready review before printing.')
+            return {'ok': True, 'status': 'G-code ready eview before printing.'}
         except Exception as e:
             with lock:
                 state.update(image_ready=False, image_status=f'Image setup failed: {e}', status=f'Image setup failed: {e}')
@@ -1303,7 +1303,7 @@ class Bridge:
             finally:
                 with lock:
                     if core['cancel_requested'].is_set():
-                        state['status'] = 'Image printing cancelled — check the machine.'
+                        state['status'] = 'Image printing cancelled check the machine.'
                     elif success:
                         state['status'] = 'Image printing finished'
                     elif not state['status'].startswith('Printing failed:'):

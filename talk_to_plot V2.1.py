@@ -1,4 +1,4 @@
-# VoiceScript: speech-to-physical-text for a 3-axis & 2-axis pen plotter / 3D printer / laser cutter / anything that reads g-code
+# VoiceScript: speech-to-physical-text for a 3-axis pen plotter / 3D printer 
 # Press Control+C to shut off the machine at any time.
 # DOES NOT WORK WITHOUT talk_to_plot_ui(V2)!!!!!!!!!!
 import glob
@@ -15,18 +15,18 @@ import numpy as np
 cancel_requested = threading.Event()
 from PIL import Image
 
-# Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC. GRBl one is like V1 anyways
+# Use "MARLIN" for 3D printers, use "GRBL" for a laser cutter/hobby CNC. GRBl one is like V1 anyways, MARLIN is my most updated/recent.
 FIRMWARE = "MARLIN"
 
 #Marlin printers use either 115200 or 250000 baud
 BAUD_RATE = 115200
 
-DRAW_FEED_RATE = 2800 #fastest without smudging (I think)
+DRAW_FEED_RATE = 2800 #fastest without smudging so far
 TRAVEL_FEED_RATE = 6500
 Z_FEED_RATE = 600
 FONT_SIZE = 13.0
 
-# Writing area, adjust
+# Writing area, adjustable. Changes based on what is inserted in UI.
 START_X = 15.0
 START_Y = 60.0
 MAX_X = 200.0
@@ -61,7 +61,7 @@ def auto_discover_machine_port():
             print(f"Discovered machine port: {ports[0]}")
             return ports[0]
 
-    print("No hardware detected. Checked the available USB serial ports.")
+    print("No hardware detected. Check the available USB serial ports.")
     return None
 
 
@@ -128,8 +128,7 @@ def initialize_machine():
         for cmd in startup_commands:
             if not send_gcode_line(dev, cmd):
                 last_connection_error = (
-                    f"The machine was found at {port_path}, but did not respond "
-                    f"to startup command {cmd}. Check firmware and baud rate."
+                    f"The machine was found at {port_path}, but did not respond to startup command {cmd}. Check firmware and baud rate."
                 )
                 print(last_connection_error)
                 dev.close()
@@ -206,7 +205,7 @@ def speech_text_to_grbl_gcode(text):
         word_min_x = min(x for x, _ in all_points)
         word_width = get_word_width(strokes)
 
-        #go to next lije of word is too long
+        #go to next line if word is too long
         if current_x + word_width > MAX_X and current_x != START_X:
             add_pen_up(gcode_commands)
             current_y -= LINE_SPACING
@@ -222,7 +221,7 @@ def speech_text_to_grbl_gcode(text):
                 f"G0 X{current_x:.2f} Y{current_y:.2f} F{TRAVEL_FEED_RATE}"
             )
 
-        #stop machine from constantly lifting
+        #stops machine from constantly lifting
         for stroke in strokes:
             first_x, first_y = stroke[0]
             start_x = current_x + (first_x - word_min_x)
@@ -329,7 +328,7 @@ def write_text(dev, text, status_callback= None):
             status_callback(f"Writing error: {e}")
         return False
 
-#image stuff 
+#image section
 
 selected_image_path = None
 image_gcode_commands = []
@@ -632,13 +631,13 @@ class VoiceScriptController:
         setup = ["G21", "G90", f"G0 Z{PEN_UP_Z:.2f} F{Z_FEED_RATE}"]
         for command in setup + commands:
             if self.cancel_event.is_set():
-                status("Image printing cancelled — check the machine.")
+                status("Image printing cancelled check the machine.")
                 return False
             if not send_gcode_line(self.device, command):
                 status("Machine rejected an image plotting command.")
                 return False
         if self.cancel_event.is_set():
-            status("Image printing cancelled — check the machine.")
+            status("Image printing cancelled check the machine.")
             return False
         if not send_gcode_line(self.device, get_home_command()):
             status("Image printing finished, but homing failed.")
