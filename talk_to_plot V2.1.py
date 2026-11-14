@@ -10,6 +10,7 @@ import threading
 import json
 import os
 import cv2
+import numpy as np
 
 cancel_requested = threading.Event()
 from PIL import Image
@@ -29,6 +30,7 @@ FONT_SIZE = 13.0
 START_X = 15.0
 START_Y = 60.0
 MAX_X = 200.0
+MAX_Y = START_Y
 MIN_Y = 0.0
 LINE_SPACING = 20.0
 
@@ -58,7 +60,6 @@ def auto_discover_machine_port():
         if ports:
             print(f"Discovered machine port: {ports[0]}")
             return ports[0]
-        #This either works or doesnt work, idk how to fix so hope it works
 
     print("No hardware detected. Checked the available USB serial ports.")
     return None
@@ -113,7 +114,6 @@ def initialize_machine():
         )
         time.sleep(2)
 
-        # Discard startup messages from the controller.
         dev.write(b"\n\n")
         time.sleep(0.5)
         dev.reset_input_buffer()
@@ -329,44 +329,53 @@ def write_text(dev, text, status_callback= None):
             status_callback(f"Writing error: {e}")
         return False
 
-#image stuff
+#image stuff 
 
 selected_image_path = None
 image_gcode_commands = []
 
 
-def get_image_edges(image_path, error_message="Could not open this image."):
-    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+def get_image_edges(
+    image_path,
+    error_message="Could not open this image.",
+    edge_strength=50,
+):
+    try:
+        edge_strength = int(edge_strength)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Edge strength must be a whole number from 0 to 100.") from exc
+    if not 0 <= edge_strength <= 100:
+        raise ValueError("Edge strength must be between 0 and 100.")
 
+    image = cv2.imread(os.fspath(image_path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise ValueError(error_message)
 
     image_height_px, image_width_px = image.shape
     max_dimension = 1200
-
-    scale = min(
-        1.0,
-        max_dimension / max(image_height_px, image_width_px)
-    )
-
+    scale = min(1.0, max_dimension / max(image_height_px, image_width_px))
     if scale < 1.0:
         image = cv2.resize(
             image,
-            (
-                int(image_width_px * scale),
-                int(image_height_px * scale)
-            ),
-            interpolation=cv2.INTER_AREA
+            (int(image_width_px * scale), int(image_height_px * scale)),
+            interpolation=cv2.INTER_AREA,
         )
 
-    blurred = cv2.GaussianBlur(image, (5, 5), 0)
-    edges = cv2.Canny(blurred, 60, 150)
+    denoised = cv2.medianBlur(image, 5)
+    contrast = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(denoised)
 
+    median = float(np.median(contrast))
+    strength = edge_strength / 100.0
+    lower_ratio = 0.66 - (0.46 * strength)
+    upper_ratio = 1.65 - (0.55 * strength)
+    lower_threshold = int(np.clip(median * lower_ratio, 0, 254))
+    upper_threshold = int(np.clip(median * upper_ratio, lower_threshold + 1, 255))
+
+    edges = cv2.Canny(contrast, lower_threshold, upper_threshold)
     return edges
 
 
 def image_size_to_fit(image_path):
-    """Scale an image to fill the largest aspect-preserving size in the plot area."""
     try:
         with Image.open(image_path) as image:
             image_width_px, image_height_px = image.size
@@ -374,7 +383,7 @@ def image_size_to_fit(image_path):
         raise ValueError(f"Could not open this image: {exc}") from exc
 
     available_width = MAX_X - START_X
-    available_height = START_Y - MIN_Y
+    available_height = MAX_Y - MIN_Y
     if available_width <= 0 or available_height <= 0:
         raise ValueError("Machine dimensions leave no usable plotting area.")
     scale = min(available_width / image_width_px, available_height / image_height_px)
@@ -382,19 +391,25 @@ def image_size_to_fit(image_path):
 
 
 def set_machine_dimensions(width_mm, y_length_mm):
-    """Set machine width and usable Y-axis length using plotter coordinates."""
-    global MAX_X, MIN_Y
+    global MAX_X, MAX_Y, MIN_Y
     width_mm, y_length_mm = float(width_mm), float(y_length_mm)
     if width_mm <= START_X:
         raise ValueError("Machine width must be greater than the starting X position.")
     if y_length_mm <= 0:
         raise ValueError("Machine Y-axis length must be greater than zero.")
     MAX_X = width_mm
-    # Y is plotted downward from START_Y, so the lower bound is START_Y - height.
-    MIN_Y = START_Y - y_length_mm
-    return {"MAX_X": MAX_X, "MIN_Y": MIN_Y, "width": MAX_X, "y_length": START_Y - MIN_Y}
+    MIN_Y = 0.0
+    MAX_Y = y_length_mm
+    return {"MAX_X": MAX_X, "MIN_Y": MIN_Y, "MAX_Y": MAX_Y, "width": MAX_X, "y_length": MAX_Y - MIN_Y}
 
-def generate_image_gcode(image_path, drawing_width=None, drawing_height=None):
+def generate_image_gcode(
+    image_path,
+    drawing_width=None,
+    drawing_height=None,
+    edge_strength=50,
+    min_contour_length_mm=0.8,
+    simplification_tolerance_mm=0.12,
+):
 
     if drawing_width is None or drawing_height is None:
         drawing_width, drawing_height = image_size_to_fit(image_path)
@@ -405,11 +420,16 @@ def generate_image_gcode(image_path, drawing_width=None, drawing_height=None):
     if START_X + drawing_width > MAX_X:
         raise ValueError("Image is too wide for the configured X area.")
 
-    if START_Y - drawing_height < MIN_Y:
+    if drawing_height > MAX_Y - MIN_Y:
         raise ValueError("Image is too tall for the configured Y area.")
 
-    edges = get_image_edges(image_path)
+    edges = get_image_edges(image_path, edge_strength=edge_strength)
     image_height_px, image_width_px = edges.shape
+    mm_per_pixel_x = drawing_width / image_width_px
+    mm_per_pixel_y = drawing_height / image_height_px
+    average_mm_per_pixel = (mm_per_pixel_x + mm_per_pixel_y) / 2
+    minimum_perimeter_px = min_contour_length_mm / average_mm_per_pixel
+    simplify_epsilon_px = simplification_tolerance_mm / average_mm_per_pixel
 
     contours, _ = cv2.findContours(
         edges,
@@ -421,7 +441,7 @@ def generate_image_gcode(image_path, drawing_width=None, drawing_height=None):
 
     def to_machine_xy(px, py):
         x = START_X + (px / image_width_px) * drawing_width
-        y = START_Y - (py / image_height_px) * drawing_height
+        y = MAX_Y - (py / image_height_px) * drawing_height
         return x, y
 
     add_pen_up(commands)
@@ -429,14 +449,13 @@ def generate_image_gcode(image_path, drawing_width=None, drawing_height=None):
     for contour in contours:
         perimeter = cv2.arcLength(contour, True)
 
-        # Ignore tiny dots and stuff
-        if perimeter < 8:
+        if perimeter < minimum_perimeter_px:
             continue
 
         approx = cv2.approxPolyDP(
             contour,
-            epsilon=1.0,
-            closed=True
+            epsilon=simplify_epsilon_px,
+            closed=True,
         )
 
         points = approx.reshape(-1, 2)
@@ -496,6 +515,7 @@ DEFAULT_SETTINGS = {
     "START_X": START_X,
     "START_Y": START_Y,
     "MAX_X": MAX_X,
+    "MAX_Y": MAX_Y,
     "MIN_Y": MIN_Y,
     "LINE_SPACING": LINE_SPACING,
     "PEN_DOWN_Z": PEN_DOWN_Z,
@@ -507,10 +527,11 @@ DEFAULT_SETTINGS = {
 
 def apply_settings(settings):
     global FIRMWARE, BAUD_RATE, DRAW_FEED_RATE, TRAVEL_FEED_RATE, Z_FEED_RATE
-    global FONT_SIZE, START_X, START_Y, MAX_X, MIN_Y, LINE_SPACING
+    global FONT_SIZE, START_X, START_Y, MAX_X, MAX_Y, MIN_Y, LINE_SPACING
     global PEN_DOWN_Z, PEN_UP_Z, WORD_SPACING, WORD_END_PADDING
 
     values = dict(DEFAULT_SETTINGS)
+    values["MAX_Y"] = MAX_Y
     values.update(settings)
     numeric_keys = set(DEFAULT_SETTINGS) - {"FIRMWARE", "BAUD_RATE"}
     for key in numeric_keys:
@@ -570,10 +591,19 @@ class VoiceScriptController:
     def fit_image_size(self, image_path):
         return image_size_to_fit(os.fspath(image_path))
 
-    def make_image_gcode(self, image_path, drawing_width=None, drawing_height=None):
+    def make_image_gcode(
+        self,
+        image_path,
+        drawing_width=None,
+        drawing_height=None,
+        edge_strength=50,
+    ):
         self.selected_image_path = os.fspath(image_path)
         self.image_gcode_commands = generate_image_gcode(
-            self.selected_image_path, drawing_width, drawing_height
+            self.selected_image_path,
+            drawing_width,
+            drawing_height,
+            edge_strength=edge_strength,
         )
         return list(self.image_gcode_commands)
 
